@@ -1265,7 +1265,7 @@ function openSettings() {
           }), label)));
 
     // 模型：手填，或者从 /models 拉回来点选
-    const modelsArea = h('textarea', { class: 'input mono', rows: 3, value: p.modelsText, spellcheck: 'false', placeholder: '每行一个模型名', oninput: bind('modelsText', () => syncChips()) });
+    const modelsArea = h('textarea', { class: 'input mono', rows: 6, value: p.modelsText, spellcheck: 'false', placeholder: '每行一个模型名', oninput: bind('modelsText', () => syncChips()) });
     const picker = h('div', { class: 'model-picker', hidden: true });
     const probeHelp = h('p', { class: 'help' }, '每行一个。模型名以服务商后台显示的为准。');
     let syncChips = () => {};
