@@ -54,6 +54,8 @@ macOS 暂时没有预编译包，用下面的 `pip install .` 安装。
 
 > Linux 安装包在 Ubuntu 24.04 上构建（glibc 2.39），适用于 Ubuntu 24.04+ / Debian 13+；
 > 更老的发行版请从源码安装。AppImage 里的 Python 是自带的，GTK / WebKitGTK 仍取系统。
+>
+> Windows 安装包没有代码签名，首次运行可能被 SmartScreen 拦一下，选「更多信息 → 仍要运行」即可。
 
 ## 安装
 
