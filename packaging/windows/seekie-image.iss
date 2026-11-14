@@ -75,7 +75,8 @@ begin
   begin
     if MsgBox('Seekie Image 需要 Microsoft WebView2 运行时。Windows 10/11 通常已经自带；' +
               '如果启动后窗口是空白的，请从 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。' +
-              #13#10#13#10 + '仍然继续安装吗？', mbConfirmation, MB_YESNO) = IDNO then
+              #13#10 + #13#10 +
+              '仍然继续安装吗？', mbConfirmation, MB_YESNO) = IDNO then
       Result := False;
   end;
 end;
