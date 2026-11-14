@@ -59,7 +59,7 @@ setup(
         ]
     },
     data_files=data_files,
-    install_requires=["pywebview>=5.0", "httpx>=0.27", "Pillow>=10.0"],
+    install_requires=["pywebview>=5.0", "httpx>=0.26", "Pillow>=10.0"],
     extras_require={
         "qt": ["pywebview[qt]>=5.0"],
         "pyside6": ["pywebview[pyside6]>=5.0"],

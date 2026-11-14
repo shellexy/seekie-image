@@ -1,7 +1,7 @@
 ; Seekie Image 的 Windows 安装包（Inno Setup 6）
 ;
 ; 在仓库根目录先跑 PyInstaller，再执行：
-;   ISCC.exe /DMyAppVersion=0.4.0 packaging\windows\seekie-image.iss
+;   ISCC.exe /DMyAppVersion=0.4.1 packaging\windows\seekie-image.iss
 ;
 ; 产物：dist\Seekie-Image-<version>-Setup.exe
 

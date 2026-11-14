@@ -6,3 +6,6 @@ dist/
 !packaging/pyinstaller/*.spec
 *.egg-info/
 .venv*/
+*.swp
+*.swo
+.DS_Store

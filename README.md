@@ -46,14 +46,17 @@ Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步
 
 | 系统 | 文件 | 说明 |
 |---|---|---|
-| Linux | `seekie-image_<版本>_amd64.deb` | Debian / Ubuntu；安装时由 apt 装上 GTK / WebKit 依赖 |
-| Linux | `Seekie-Image-<版本>-x86_64.AppImage` | 通用；程序自己的 Python 在包里，GTK / WebKit 用系统的 |
+| Linux | `seekie-image_<版本>_all.deb` | 纯 Python 包；由 apt 装上 python3-webview / httpx / Pillow 和 GTK / WebKit 依赖 |
+| Linux | `Seekie-Image-<版本>-x86_64.AppImage` | 自带 Python 依赖；GTK / WebKit 用系统的 |
 | Windows | `Seekie-Image-<版本>-Setup.exe` | Windows 10/11；需要 WebView2 运行时（一般已自带） |
 
 macOS 暂时没有预编译包，用下面的 `pip install .` 安装。
 
-> Linux 安装包在 Ubuntu 24.04 上构建（glibc 2.39），适用于 Ubuntu 24.04+ / Debian 13+；
-> 更老的发行版请从源码安装。AppImage 里的 Python 是自带的，GTK / WebKitGTK 仍取系统。
+> `.deb` 不再冻结 Python 或 GTK/WebKit，只把 Python 代码装进 `/usr/lib/python3/dist-packages/seekie_image`；
+> 运行时用系统的 `python3` 和 `python3-webview`（Ubuntu 24.04 提供 5.0.5），需要能提供
+> `python3-webview >= 5.0`、`python3-httpx >= 0.26`、`python3-pil >= 10.0` 的发行版。
+> 流式响应由程序自己解析，不需要 `python3-httpx-sse`。
+> AppImage 仍由 Ubuntu 24.04 构建，自带 Python，GTK/WebKitGTK 取系统的，需要 glibc 2.39+。
 >
 > Windows 安装包没有代码签名，首次运行可能被 SmartScreen 拦一下，选「更多信息 → 仍要运行」即可。
 
@@ -297,20 +300,22 @@ pywebview 只负责开窗口和「另存为」对话框。
 在 Actions 里手动触发 `Build` 只构建、不发布，方便先验证。本地构建：
 
 ```bash
+# Linux deb：纯 Python，不需要 PyInstaller
+bash packaging/linux/build-deb.sh
+
+# AppImage：需要 PyInstaller
 pip install . pyinstaller
 pyinstaller --noconfirm --clean packaging/pyinstaller/seekie-image.spec
-
-# Linux：需要 python3-gi、gir1.2-gtk-3.0、gir1.2-webkit2-4.1
-bash packaging/linux/build-deb.sh
 bash packaging/linux/build-appimage.sh
 
 # Windows：需要 Inno Setup 6
-ISCC.exe /DMyAppVersion=0.4.0 packaging\windows\seekie-image.iss
+ISCC.exe /DMyAppVersion=0.4.1 packaging\windows\seekie-image.iss
 ```
 
-产物都在 `dist/` 里。Linux 包使用系统的 GTK / WebKitGTK；AppImage 自带 Python 和
-Python 依赖，但不带 WebKit 本身。`.github/workflows/build.yml` 里还有浏览器模式和
-Xvfb 原生窗口的冒烟测试。
+产物都在 `dist/` 里。`.deb` 是 `Architecture: all` 的纯 Python 包，使用系统的
+`python3-webview` 和 GTK / WebKitGTK；AppImage 自带 Python 和 Python 依赖，GTK / WebKit
+仍取系统的。`.github/workflows/build.yml` 里用 Ubuntu 24.04 的系统包跑测试，
+并包含浏览器模式和 Xvfb 原生窗口的冒烟测试。
 
 ## 目前没有做的
 

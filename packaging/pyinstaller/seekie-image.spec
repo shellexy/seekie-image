@@ -12,10 +12,23 @@ from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = Path(SPECPATH).parent.parent  # packaging/pyinstaller -> 仓库根目录
 
-datas = [
-    (str(ROOT / "seekie_image" / "web"), "seekie_image/web"),
-    (str(ROOT / "seekie_image" / "assets"), "seekie_image/assets"),
-]
+def package_data(src: Path, dest: str):
+    """逐个文件加入 datas，跳过编辑器临时文件和字节码。"""
+    files = []
+    for path in src.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(src)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        if path.suffix in (".pyc", ".pyo", ".swp", ".swo"):
+            continue
+        files.append((str(path), str(Path(dest) / relative.parent)))
+    return files
+
+
+datas = package_data(ROOT / "seekie_image" / "web", "seekie_image/web")
+datas += package_data(ROOT / "seekie_image" / "assets", "seekie_image/assets")
 # pywebview 自己的 JS / WebView2 运行库
 datas += collect_data_files("webview")
 
