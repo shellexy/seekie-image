@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="app-token" content="__TOKEN__">
+  <title>seekie-image</title>
+  <link rel="icon" type="image/png" href="static/logo.png">
+  <link rel="stylesheet" href="static/app.css">
+  <script src="static/app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <button type="button" id="new-session" class="new-session"></button>
+      <nav id="sessions" class="sessions" aria-label="历史绘画"></nav>
+      <button type="button" id="open-settings" class="side-link"></button>
+    </aside>
+
+    <main class="main" id="main">
+      <div class="feed" id="feed">
+        <div class="column" id="cards"></div>
+      </div>
+
+      <form class="composer column" id="composer">
+        <div class="ref-strip" id="ref-strip" hidden></div>
+        <div class="composer-input">
+          <textarea id="prompt" rows="2" placeholder="描述你想生成的画面…" aria-label="画面描述"></textarea>
+          <button type="button" id="attach" class="icon-btn" aria-label="添加参考图"
+                  title="添加参考图，也可以直接粘贴（Ctrl+V）或拖进来"></button>
+          <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        </div>
+        <div class="composer-bar">
+          <div class="pickers" id="pickers"></div>
+          <button type="submit" id="generate" class="primary" title="Enter 发送，Shift+Enter 换行"></button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>

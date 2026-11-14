@@ -1,0 +1,101 @@
+"""入口：启动本机服务，然后用 pywebview 开一个桌面窗口指向它。"""
+
+from __future__ import annotations
+
+import argparse
+import inspect
+import logging
+import sys
+import threading
+import webbrowser
+from pathlib import Path
+
+from . import __version__, desktop
+from .config import default_data_dir, default_images_dir
+from .core import Core
+from .server import Server
+
+TITLE = "seekie-image"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="seekie-image", description="接 OpenAI 兼容绘图接口的桌面小工具")
+    parser.add_argument("--browser", action="store_true", help="不开桌面窗口，改用系统浏览器")
+    parser.add_argument("--no-open", action="store_true", help="浏览器模式下不自动打开页面")
+    parser.add_argument("--host", default="127.0.0.1", help="监听地址，默认只限本机")
+    parser.add_argument("--port", type=int, default=0, help="监听端口，默认随机")
+    parser.add_argument("--data-dir", type=Path,
+                        help=f"配置和历史记录所在的目录，默认 {default_data_dir()}")
+    parser.add_argument("--images-dir", type=Path, help="生成的图片保存到哪，默认是数据目录下的 images/")
+    parser.add_argument("--debug", action="store_true", help="输出调试日志，并打开开发者工具")
+    parser.add_argument("--install-desktop", action="store_true",
+                        help="Linux：把启动器和图标装进当前用户的应用菜单，然后退出")
+    parser.add_argument("--uninstall-desktop", action="store_true", help="Linux：移除上面装的启动器和图标")
+    parser.add_argument("--version", action="version", version=__version__)
+    args = parser.parse_args(argv)
+
+    if args.install_desktop:
+        return desktop.install()
+    if args.uninstall_desktop:
+        return desktop.uninstall()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        # 用 pythonw / gui 入口启动时没有 stderr
+        handlers=None if sys.stderr else [logging.NullHandler()],
+    )
+    # httpx 的 INFO 日志会打印完整请求地址，默认不需要
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+    data_dir = (args.data_dir or default_data_dir()).expanduser()
+    images_dir = (args.images_dir or default_images_dir(args.data_dir and data_dir)).expanduser()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    core = Core(data_dir, images_dir)
+    server = Server(args.host, args.port, core)
+    log = logging.getLogger("seekie_image")
+    log.info("数据目录：%s", data_dir)
+    log.info("图片目录：%s", images_dir)
+
+    webview = None
+    if not args.browser:
+        try:
+            import webview
+        except ImportError:
+            log.warning("没有安装 pywebview，改用浏览器打开。安装：pip install pywebview")
+
+    if webview is None:
+        log.info("界面地址：%s", server.url)
+        if not args.no_open:
+            threading.Timer(0.3, webbrowser.open, [server.url]).start()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        return 0
+
+    threading.Thread(target=server.serve_forever, name="http", daemon=True).start()
+    # GTK 和 Qt 都用 argv[0] 给窗口起类名（WM_CLASS / Wayland app_id）。
+    # 让它和 .desktop 文件同名，任务栏才会把窗口和启动器、图标对上。
+    sys.argv[0] = desktop.APP_ID
+    webview.settings["ALLOW_DOWNLOADS"] = True
+    core.window = webview.create_window(
+        TITLE,
+        server.url,
+        width=1200,
+        height=820,
+        min_size=(820, 600),
+        background_color="#F5F4FC",
+        text_select=True,  # pywebview 默认禁止选中文字，这里需要能选中提示词
+    )
+    options = {"debug": args.debug}
+    if "icon" in inspect.signature(webview.start).parameters:  # 较老的 pywebview 没有这个参数
+        options["icon"] = str(desktop.ICON)  # 只有 GTK / Qt 后端会用到
+    webview.start(**options)
+    server.shutdown()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

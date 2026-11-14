@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=seekie-image
+GenericName=AI Image Generator
+GenericName[zh_CN]=AI 绘图
+Comment=Generate images with OpenAI-compatible image APIs
+Comment[zh_CN]=用 OpenAI 兼容的绘图接口生成图片
+Exec=seekie-image
+Icon=seekie-image
+Terminal=false
+Categories=Graphics;
+Keywords=AI;image;draw;gpt-image;
+Keywords[zh_CN]=AI;绘图;画图;图片;gpt-image;
+StartupNotify=true
+StartupWMClass=seekie-image
