@@ -70,6 +70,5 @@ setup(
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
         "Topic :: Multimedia :: Graphics",
-        "License :: OSI Approved :: MIT License",
     ],
 )

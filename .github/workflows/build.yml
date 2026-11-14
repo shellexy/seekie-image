@@ -19,8 +19,8 @@ jobs:
     name: 后端测试
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: 安装依赖
@@ -33,7 +33,7 @@ jobs:
     needs: test
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: 安装系统依赖
         run: |
@@ -68,7 +68,6 @@ jobs:
 
       # 原生窗口依赖 GTK/WebKit 和 Xvfb。先在 CI 里跑一遍，确认冻结包能加载它们。
       - name: 冒烟测试（Xvfb 原生窗口）
-        continue-on-error: true
         run: bash packaging/linux/native-smoke.sh dist/seekie-image/seekie-image
 
       - name: 构建 deb 和 AppImage
@@ -91,7 +90,7 @@ jobs:
           chmod +x "$app"
           bash packaging/linux/smoke-test.sh "$app"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           if-no-files-found: error
@@ -104,9 +103,9 @@ jobs:
     needs: test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -169,7 +168,7 @@ jobs:
             "/DMyAppVersion=${{ steps.version.outputs.version }}" `
             "packaging\windows\seekie-image.iss"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           if-no-files-found: error
@@ -181,11 +180,11 @@ jobs:
     needs: [linux, windows]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: artifacts/*
