@@ -5,11 +5,14 @@
 
 import io
 import os
+import socket
+import stat
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -17,9 +20,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import mock_api  # noqa: E402
-from seekie_image import clipboard, config, desktop  # noqa: E402
+from seekie_image import app, clipboard, config, desktop  # noqa: E402
 from seekie_image.core import ApiError, Core  # noqa: E402
+from seekie_image.instance import InstanceLock, activate  # noqa: E402
 from seekie_image.provider import normalize_base_url  # noqa: E402
+from seekie_image.server import Server  # noqa: E402
+
+
+def fake_window(shown: bool = True) -> SimpleNamespace:
+    """够 Core.activate() 用的假窗口，记下它被要求做了什么。"""
+    window = SimpleNamespace(calls=[])
+    window.events = SimpleNamespace(shown=SimpleNamespace(is_set=lambda: shown))
+    window.restore = lambda: window.calls.append("restore")
+    window.show = lambda: window.calls.append("show")
+    return window
 
 
 class BackendTest(unittest.TestCase):
@@ -308,6 +322,108 @@ class BackendTest(unittest.TestCase):
             (core.images_dir / "old_t.webp").write_bytes(b"x")
             self.assertEqual(core.file_path("ref_old.png").parent, core.images_dir)
             self.assertEqual(core.file_path("old_t.webp").parent, core.images_dir)
+
+
+class InstanceTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        self.core = Core(self.dir)
+        self.addCleanup(self.core.close)
+
+    def start_server(self) -> Server:
+        server = Server("127.0.0.1", 0, self.core)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server
+
+    def hold_lock(self, *, native: bool) -> tuple[InstanceLock, Server]:
+        server = self.start_server()
+        lock = InstanceLock(self.dir)
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        lock.remember(url=server.url, token=server.token, native=native)
+        return lock, server
+
+    def test_lock_is_exclusive_per_directory(self):
+        first, second = InstanceLock(self.dir), InstanceLock(self.dir)
+        self.assertTrue(first.acquire())
+        self.assertFalse(second.acquire())  # 第二个进程（这里用另一个 fd 模拟）拿不到
+        first.release()
+        self.assertTrue(second.acquire())
+        second.release()
+
+    def test_instance_info_is_private_and_validated(self):
+        lock = InstanceLock(self.dir)
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        lock.remember(url="http://127.0.0.1:1234/", token="secret", native=True)
+        if os.name == "posix":
+            self.assertEqual(stat.S_IMODE(lock.info_path.stat().st_mode), 0o600)
+        self.assertEqual(lock.info()["token"], "secret")
+
+        lock.info_path.write_text('{"url": "ftp://x", "token": "t"}', "utf-8")
+        self.assertIsNone(lock.info())  # 不认识地址格式就当作没有
+        lock.info_path.write_text("不是 JSON", "utf-8")
+        self.assertIsNone(lock.info())
+
+    def test_activate_raises_window(self):
+        self.core.window = fake_window()
+        self.assertEqual(self.core.activate(), {"native": True})
+        self.assertEqual(self.core.window.calls, ["restore", "show"])
+
+    def test_activate_in_browser_mode(self):
+        self.core.window = None
+        self.assertEqual(self.core.activate(), {"native": False})
+
+    def test_close_removes_info_and_releases_lock(self):
+        lock = InstanceLock(self.dir)
+        self.assertTrue(lock.acquire())
+        lock.remember(url="http://127.0.0.1:1234/", token="t", native=True)
+        lock.close()
+        self.assertFalse(lock.info_path.exists())
+        again = InstanceLock(self.dir)
+        self.assertTrue(again.acquire())  # 锁确实放掉了
+        again.release()
+
+    def test_activate_does_not_wait_for_starting_window(self):
+        self.core.window = fake_window(shown=False)
+        self.assertEqual(self.core.activate(), {"native": True})
+        self.assertEqual(self.core.window.calls, [])  # 窗口还在启动，等它自己出来
+
+    def test_activate_returns_none_when_nothing_listens(self):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        self.assertIsNone(activate({"url": f"http://127.0.0.1:{port}/", "token": "t"}))
+
+    def test_second_launch_wakes_native_window(self):
+        self.core.window = fake_window()
+        self.hold_lock(native=True)
+        self.assertEqual(app.main(["--data-dir", str(self.dir), "--no-open"]), 0)
+        self.assertEqual(self.core.window.calls, ["restore", "show"])
+
+    def test_second_launch_opens_browser_when_first_is_browser_mode(self):
+        _lock, server = self.hold_lock(native=False)
+        with mock.patch("seekie_image.app.webbrowser.open") as opened:
+            self.assertEqual(app.main(["--data-dir", str(self.dir), "--browser"]), 0)
+        opened.assert_called_once_with(server.url)
+
+    def test_second_launch_no_open_does_nothing(self):
+        self.hold_lock(native=False)
+        with mock.patch("seekie_image.app.webbrowser.open") as opened:
+            self.assertEqual(app.main(["--data-dir", str(self.dir), "--browser", "--no-open"]), 0)
+        opened.assert_not_called()
+
+    def test_second_launch_does_not_open_browser_when_unreachable(self):
+        self.hold_lock(native=True)
+        with mock.patch.object(InstanceLock, "wake", return_value={
+            "url": "http://127.0.0.1:1/", "token": "t", "native": None,
+        }), mock.patch("seekie_image.app.webbrowser.open") as opened:
+            self.assertEqual(app.main(["--data-dir", str(self.dir)]), 0)
+        opened.assert_not_called()
 
 
 class DirectoriesTest(unittest.TestCase):

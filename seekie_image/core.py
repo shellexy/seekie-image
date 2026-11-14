@@ -189,6 +189,24 @@ class Core:
             raise ApiError(500, f"复制图片失败：{exc}") from exc
         return {"ok": True}
 
+    def activate(self) -> dict:
+        """把已有窗口调到前面。第二个实例通过 /api/activate 调用。"""
+        window = self.window
+        if window is None:
+            return {"native": False}
+        shown = getattr(getattr(window, "events", None), "shown", None)
+        if shown is not None and not shown.is_set():
+            return {"native": True}  # 窗口正在启动，马上就会出来，不用再叫它
+        try:
+            restore = getattr(window, "restore", None)
+            if restore:
+                restore()  # 最小化时先还原；GTK 和 Qt 都会顺手把窗口提到前面
+            window.show()
+        except Exception as exc:
+            log.warning("切换窗口失败", exc_info=True)
+            raise ApiError(500, f"切换窗口失败：{exc}") from exc
+        return {"native": True}
+
     def toggle_devtools(self) -> dict:
         """打开或关闭内核的开发者工具。只在桌面窗口模式下可用。"""
         if self.window is None:
