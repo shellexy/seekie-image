@@ -59,6 +59,9 @@ macOS 暂时没有预编译包，用下面的 `pip install .` 安装。
 > AppImage 仍由 Ubuntu 24.04 构建，自带 Python，GTK/WebKitGTK 取系统的，需要 glibc 2.39+。
 >
 > Windows 安装包没有代码签名，首次运行可能被 SmartScreen 拦一下，选「更多信息 → 仍要运行」即可。
+>
+> 如果之前用 `pip install .` 装过，建议先 `pip uninstall seekie-image` 并确认 `which -a seekie-image`；
+> 否则 `~/.local/bin` 里的旧启动器可能优先于 deb 安装的 `/usr/bin/seekie-image`。
 
 ## 安装
 
