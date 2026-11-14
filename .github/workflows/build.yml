@@ -1,0 +1,191 @@
+name: Build
+
+# 推 v* 标签时构建 Linux（.deb / AppImage）和 Windows 安装包，全部成功后才发布到 Releases。
+# 手动触发只构建并把产物留在 Actions 里，方便先跑通再发版。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: 后端测试
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: 跑测试
+        run: python -m unittest discover -s tests -v
+
+  linux:
+    name: Linux（deb / AppImage）
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-venv python3-gi \
+            gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
+            xvfb xauth curl file
+
+      - name: 准备构建环境
+        run: |
+          /usr/bin/python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install . pyinstaller
+
+      - name: 校验标签与版本号
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' seekie_image/__init__.py)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "标签 $GITHUB_REF_NAME 与 __init__.py 的版本 $version 不一致" >&2
+            exit 1
+          fi
+
+      - name: PyInstaller
+        run: |
+          .venv/bin/pyinstaller --noconfirm --clean packaging/pyinstaller/seekie-image.spec
+          dist/seekie-image/seekie-image --version
+
+      - name: 冒烟测试（浏览器模式）
+        run: bash packaging/linux/smoke-test.sh dist/seekie-image/seekie-image
+
+      # 原生窗口依赖 GTK/WebKit 和 Xvfb。先在 CI 里跑一遍，确认冻结包能加载它们。
+      - name: 冒烟测试（Xvfb 原生窗口）
+        continue-on-error: true
+        run: bash packaging/linux/native-smoke.sh dist/seekie-image/seekie-image
+
+      - name: 构建 deb 和 AppImage
+        run: |
+          bash packaging/linux/build-deb.sh
+          bash packaging/linux/build-appimage.sh
+
+      - name: 冒烟测试 deb 里的程序
+        run: |
+          deb="$(ls dist/*.deb)"
+          mkdir -p "$RUNNER_TEMP/deb"
+          dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
+          bash packaging/linux/smoke-test.sh "$RUNNER_TEMP/deb/opt/seekie-image/seekie-image"
+
+      - name: 冒烟测试 AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          app="$(ls dist/*.AppImage)"
+          chmod +x "$app"
+          bash packaging/linux/smoke-test.sh "$app"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          if-no-files-found: error
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+
+  windows:
+    name: Windows（安装包）
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install . pyinstaller
+
+      - name: 版本号
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path seekie_image/__init__.py -Pattern '__version__ = "([^"]+)"').Matches.Groups[1].Value
+          "version=$version" >> $env:GITHUB_OUTPUT
+          if ("${{ github.ref_type }}" -eq "tag" -and "v$version" -ne "${{ github.ref_name }}") {
+            throw "标签与 __init__.py 的版本不一致"
+          }
+
+      - name: PyInstaller
+        run: pyinstaller --noconfirm --clean packaging/pyinstaller/seekie-image.spec
+
+      - name: 冒烟测试（浏览器模式）
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP "seekie-data"
+          New-Item -ItemType Directory -Force -Path $data | Out-Null
+          $port = Get-Random -Minimum 20000 -Maximum 40000
+          $exe = (Resolve-Path "dist\seekie-image\seekie-image.exe").Path
+          $stdout = Join-Path $env:RUNNER_TEMP "seekie-out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "seekie-err.log"
+          $p = Start-Process -FilePath $exe -ArgumentList "--browser","--no-open","--port",$port,"--data-dir",$data `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          try {
+            $page = $null
+            for ($i = 0; $i -lt 100; $i++) {
+              try {
+                $page = Invoke-WebRequest -UseBasicParsing -NoProxy "http://127.0.0.1:$port/"
+                break
+              } catch {
+                Start-Sleep -Milliseconds 200
+              }
+            }
+            if ($null -eq $page) { throw "HTTP 服务没起来`n$(Get-Content $stderr -Raw)" }
+            if ($page.Content -notmatch 'Seekie Image') { throw "页面标题不对" }
+            $second = Start-Process -FilePath $exe -ArgumentList "--browser","--no-open","--data-dir",$data -PassThru -Wait
+            if ($second.ExitCode -ne 0) { throw "第二个实例退出码 $($second.ExitCode)" }
+            $p.Refresh()
+            if ($p.HasExited) { throw "第二个实例把第一个实例挤掉了" }
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: 安装 Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: 生成安装包
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=${{ steps.version.outputs.version }}" `
+            "packaging\windows\seekie-image.iss"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          if-no-files-found: error
+          path: dist/*.exe
+
+  release:
+    name: 发布到 Releases
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*

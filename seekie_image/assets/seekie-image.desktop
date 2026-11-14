@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=seekie-image
+Name=Seekie Image
 GenericName=AI Image Generator
 GenericName[zh_CN]=AI 绘图
 Comment=Generate images with OpenAI-compatible image APIs

@@ -6,6 +6,7 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const TOKEN = $('meta[name="app-token"]').content;
+const APP_NAME = 'Seekie Image';
 const MAX_REFS = 10;
 
 // 图标取自 Lucide（ISC 许可），内联进来以免依赖网络。
@@ -156,6 +157,25 @@ const els = {
 
 const provider = (id) => state.providers.find((p) => p.id === id);
 const option = (group, id) => state.options[group].find((o) => o.id === id);
+const currentSession = () => state.sessions.find((s) => s.id === state.currentId) || null;
+let lastWindowTitle = '';
+
+/**
+ * 页面标题和桌面窗口标题：有绘画名时用「绘画名 - Seekie Image」。
+ * 桌面窗口标题归后端管；浏览器模式下改 document.title 就够了。
+ */
+async function syncTitle() {
+  const name = currentSession()?.title?.trim();
+  const title = name ? `${name} - ${APP_NAME}` : APP_NAME;
+  if (document.title !== title) document.title = title;
+  if (!state.native || title === lastWindowTitle) return;
+  try {
+    const result = await api('POST', 'api/window-title', { title });
+    lastWindowTitle = result.set === false ? '' : title; // 页面还没载完时等 load 再试
+  } catch {
+    lastWindowTitle = '';
+  }
+}
 
 /** 设置变动后，保证当前选中的服务商和模型仍然存在。 */
 function fixPick() {
@@ -459,6 +479,7 @@ function sizeDialog(current) {
 
 function renderSessions() {
   els.sessions.replaceChildren();
+  syncTitle();
   if (!state.sessions.length) {
     els.sessions.append(h('p', { class: 'sessions-empty' }, '每次新绘画生成的图片都会留在这里'));
     return;
@@ -1488,4 +1509,5 @@ async function boot() {
   setInterval(tickClocks, 1000);
 }
 
+window.addEventListener('load', syncTitle);
 boot();

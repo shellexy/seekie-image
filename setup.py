@@ -39,6 +39,14 @@ setup(
     description="接 OpenAI 兼容绘图接口（gpt-image 系列、new-api / one-api 中转站）的桌面绘图工具",
     long_description=(ROOT / "README.md").read_text("utf-8"),
     long_description_content_type="text/markdown",
+    license="MIT",
+    license_files=["LICENSE"],
+    url="https://github.com/shellexy/seekie-image",
+    project_urls={
+        "Source": "https://github.com/shellexy/seekie-image",
+        "Issues": "https://github.com/shellexy/seekie-image/issues",
+        "Releases": "https://github.com/shellexy/seekie-image/releases",
+    },
     python_requires=">=3.10",
     packages=["seekie_image"],
     package_data={
@@ -62,5 +70,6 @@ setup(
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
         "Topic :: Multimedia :: Graphics",
+        "License :: OSI Approved :: MIT License",
     ],
 )

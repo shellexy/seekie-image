@@ -207,6 +207,24 @@ class Core:
             raise ApiError(500, f"切换窗口失败：{exc}") from exc
         return {"native": True}
 
+    def set_window_title(self, title) -> dict:
+        """更新桌面窗口标题。浏览器模式由页面自己改 document.title。"""
+        window = self.window
+        if window is None:
+            return {"native": False}
+        title = " ".join(str(title or "").split())[:120]
+        if not title:
+            raise ApiError(400, "标题不能为空")
+        loaded = getattr(getattr(window, "events", None), "loaded", None)
+        if loaded is not None and not loaded.is_set():
+            return {"native": True, "set": False}  # 页面还没载完，等 load 事件后再试
+        try:
+            window.title = title
+        except Exception as exc:
+            log.warning("设置窗口标题失败", exc_info=True)
+            raise ApiError(500, f"设置窗口标题失败：{exc}") from exc
+        return {"native": True, "set": True}
+
     def toggle_devtools(self) -> dict:
         """打开或关闭内核的开发者工具。只在桌面窗口模式下可用。"""
         if self.window is None:

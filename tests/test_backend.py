@@ -19,18 +19,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import httpx  # noqa: E402
 import mock_api  # noqa: E402
-from seekie_image import app, clipboard, config, desktop  # noqa: E402
+from seekie_image import app, clipboard, config, desktop, provider  # noqa: E402
 from seekie_image.core import ApiError, Core  # noqa: E402
 from seekie_image.instance import InstanceLock, activate  # noqa: E402
 from seekie_image.provider import normalize_base_url  # noqa: E402
 from seekie_image.server import Server  # noqa: E402
 
 
-def fake_window(shown: bool = True) -> SimpleNamespace:
-    """够 Core.activate() 用的假窗口，记下它被要求做了什么。"""
-    window = SimpleNamespace(calls=[])
-    window.events = SimpleNamespace(shown=SimpleNamespace(is_set=lambda: shown))
+def fake_window(shown: bool = True, loaded: bool = True) -> SimpleNamespace:
+    """够 Core.activate() / set_window_title() 用的假窗口，记下它被要求做了什么。"""
+    window = SimpleNamespace(calls=[], title="Seekie Image")
+    window.events = SimpleNamespace(
+        shown=SimpleNamespace(is_set=lambda: shown),
+        loaded=SimpleNamespace(is_set=lambda: loaded),
+    )
     window.restore = lambda: window.calls.append("restore")
     window.show = lambda: window.calls.append("show")
     return window
@@ -378,6 +382,26 @@ class InstanceTest(unittest.TestCase):
         self.core.window = None
         self.assertEqual(self.core.activate(), {"native": False})
 
+    def test_window_title_uses_painting_name(self):
+        self.core.window = fake_window()
+        self.assertEqual(
+            self.core.set_window_title(" 雪山  日出 - Seekie Image "),
+            {"native": True, "set": True},
+        )
+        self.assertEqual(self.core.window.title, "雪山 日出 - Seekie Image")
+
+    def test_window_title_waits_for_page_load(self):
+        self.core.window = fake_window(loaded=False)
+        self.assertEqual(self.core.set_window_title("雪山 - Seekie Image"), {"native": True, "set": False})
+        self.assertEqual(self.core.window.title, "Seekie Image")
+
+    def test_window_title_ignores_empty_and_browser_mode(self):
+        self.core.window = fake_window()
+        with self.assertRaises(ApiError):
+            self.core.set_window_title("  ")
+        self.core.window = None
+        self.assertEqual(self.core.set_window_title("雪山 - Seekie Image"), {"native": False})
+
     def test_close_removes_info_and_releases_lock(self):
         lock = InstanceLock(self.dir)
         self.assertTrue(lock.acquire())
@@ -424,6 +448,22 @@ class InstanceTest(unittest.TestCase):
         }), mock.patch("seekie_image.app.webbrowser.open") as opened:
             self.assertEqual(app.main(["--data-dir", str(self.dir)]), 0)
         opened.assert_not_called()
+
+
+class NoProxyTest(unittest.TestCase):
+    def test_bracketed_ipv6_entries_are_cleaned(self):
+        env = {"NO_PROXY": "localhost, [::1], [2001:db8::1]:8080", "no_proxy": "[::1]"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            provider.clean_no_proxy()
+            self.assertEqual(os.environ["NO_PROXY"], "localhost,::1,2001:db8::1")
+            self.assertEqual(os.environ["no_proxy"], "::1")
+
+    def test_httpx_accepts_the_cleaned_environment(self):
+        # 原样带 [::1] 时 httpx.AsyncClient() 会抛 InvalidURL，清洗后应该能建客户端
+        with mock.patch.dict(os.environ, {"NO_PROXY": "localhost,[::1]", "no_proxy": "localhost,[::1]"}, clear=False):
+            provider.clean_no_proxy()
+            client = httpx.Client()
+            client.close()
 
 
 class DirectoriesTest(unittest.TestCase):

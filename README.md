@@ -1,5 +1,7 @@
 # Seekie-Image
 
+[![Version](https://img.shields.io/github/v/release/shellexy/seekie-image?label=version&style=flat-square)](https://github.com/shellexy/seekie-image/releases) [![Build](https://github.com/shellexy/seekie-image/actions/workflows/build.yml/badge.svg)](https://github.com/shellexy/seekie-image/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE) ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey?style=flat-square)
+
 接 OpenAI 兼容绘图接口（官方接口，或 new-api / one-api 一类中转站）的桌面小工具。
 Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步骤。
 
@@ -13,6 +15,7 @@ Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步
   <li><a href="#user-content-seekie-image">Seekie-Image</a>
     <ul>
       <li><a href="#user-content-截图">截图</a></li>
+      <li><a href="#user-content-下载安装包">下载安装包</a></li>
       <li><a href="#user-content-安装">安装</a>
         <ul>
           <li><a href="#user-content-linux-上的启动器和图标">Linux 上的启动器和图标</a></li>
@@ -21,6 +24,7 @@ Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步
           <li><a href="#user-content-只开一个窗口">只开一个窗口</a></li>
         </ul>
       </li>
+      <li><a href="#user-content-窗口标题">窗口标题</a></li>
       <li><a href="#user-content-粘贴和右键菜单">粘贴和右键菜单</a></li>
       <li><a href="#user-content-一次多张和中间预览">一次多张和中间预览</a></li>
       <li><a href="#user-content-开发者工具">开发者工具</a></li>
@@ -30,10 +34,26 @@ Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步
       <li><a href="#user-content-代码结构">代码结构</a></li>
       <li><a href="#user-content-打包">打包</a></li>
       <li><a href="#user-content-目前没有做的">目前没有做的</a></li>
+      <li><a href="#user-content-许可证">许可证</a></li>
     </ul>
   </li>
 </ul>
 </nav>
+
+## 下载安装包
+
+从 [Releases](https://github.com/shellexy/seekie-image/releases) 下载：
+
+| 系统 | 文件 | 说明 |
+|---|---|---|
+| Linux | `seekie-image_<版本>_amd64.deb` | Debian / Ubuntu；安装时由 apt 装上 GTK / WebKit 依赖 |
+| Linux | `Seekie-Image-<版本>-x86_64.AppImage` | 通用；程序自己的 Python 在包里，GTK / WebKit 用系统的 |
+| Windows | `Seekie-Image-<版本>-Setup.exe` | Windows 10/11；需要 WebView2 运行时（一般已自带） |
+
+macOS 暂时没有预编译包，用下面的 `pip install .` 安装。
+
+> Linux 安装包在 Ubuntu 24.04 上构建（glibc 2.39），适用于 Ubuntu 24.04+ / Debian 13+；
+> 更老的发行版请从源码安装。AppImage 里的 Python 是自带的，GTK / WebKitGTK 仍取系统。
 
 ## 安装
 
@@ -115,6 +135,11 @@ python main.py
 * 程序在数据目录里用 `instance.lock` 占位、用 `instance.json` 记下自己的界面地址和令牌。
   锁由操作系统管理，进程崩溃或被 kill 时自动释放，不需要手工清理。
 
+## 窗口标题
+
+打开一组绘画时，页面标题和桌面窗口标题会显示「绘画名 - Seekie Image」；新建绘画时只显示
+`Seekie Image`。绘画名就是左侧列表里的标题，可以在那里右键重命名。
+
 ## 粘贴和右键菜单
 
 * **粘贴图片**：在输入框里按 Ctrl+V（macOS 是 ⌘V），剪贴板里的图片会变成参考图；文字照常粘贴。
@@ -181,6 +206,9 @@ python main.py
 
 `xhigh`、`max` 和 `complexity` 是 gpt-image-2.6 才有的，发给旧模型会被接口拒绝。
 
+代理环境变量（`http_proxy` / `https_proxy` / `no_proxy`）照常生效。如果 `NO_PROXY` 里写了
+`[::1]` 这种带方括号的 IPv6，程序会自动改写成 `::1` 再交给 httpx，不需要手动清理。
+
 ## 不花钱先试一下
 
 仓库里带了一个假的接口，画的是随机配色的山和太阳：
@@ -246,6 +274,8 @@ seekie_image/
   assets/            图标（icon.png、seekie-image.ico、hicolor/ 各尺寸）和 .desktop 文件
   web/               界面（index.html / app.css / app.js / logo.png）
 tests/               后端测试：python -m unittest discover -s tests
+packaging/           PyInstaller 配置、Linux 的 deb / AppImage、Windows 的 Inno Setup
+.github/workflows/   推 v* 标签时构建并发布安装包
 ```
 
 界面和后端之间走的是本机 HTTP（只监听 127.0.0.1，接口要带页面里注入的令牌，并校验 Host 头），
@@ -257,17 +287,35 @@ pywebview 只负责开窗口和「另存为」对话框。
 
 ## 打包
 
-可以用 PyInstaller 打成单个可执行文件（这条命令没有在各平台上验证过，可能需要按实际情况调整）：
+推一个 `v*` 标签时，[.github/workflows/build.yml](.github/workflows/build.yml) 会构建并发布：
+
+* Linux：`.deb` 和 AppImage；
+* Windows：Inno Setup 安装包。
+
+在 Actions 里手动触发 `Build` 只构建、不发布，方便先验证。本地构建：
 
 ```bash
-pip install pyinstaller
-# Windows 上把 --add-data 里的冒号换成分号
-pyinstaller --noconsole --name seekie-image --icon seekie_image/assets/seekie-image.ico \
-  --add-data "seekie_image/web:seekie_image/web" --add-data "seekie_image/assets:seekie_image/assets" main.py
+pip install . pyinstaller
+pyinstaller --noconfirm --clean packaging/pyinstaller/seekie-image.spec
+
+# Linux：需要 python3-gi、gir1.2-gtk-3.0、gir1.2-webkit2-4.1
+bash packaging/linux/build-deb.sh
+bash packaging/linux/build-appimage.sh
+
+# Windows：需要 Inno Setup 6
+ISCC.exe /DMyAppVersion=0.4.0 packaging\windows\seekie-image.iss
 ```
+
+产物都在 `dist/` 里。Linux 包使用系统的 GTK / WebKitGTK；AppImage 自带 Python 和
+Python 依赖，但不带 WebKit 本身。`.github/workflows/build.yml` 里还有浏览器模式和
+Xvfb 原生窗口的冒烟测试。
 
 ## 目前没有做的
 
 * 「做成视频」：那是另一套视频接口。
 * Windows / macOS 上的 Ctrl+Shift+I（那里要用 `--debug`）。
 * 一次超过 4 张：界面上最多选 4 张，更多可以在额外参数里写 `{"n": 8}`。
+
+## 许可证
+
+MIT，见 [LICENSE](LICENSE)。

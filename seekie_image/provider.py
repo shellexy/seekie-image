@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import re
 import threading
 from pathlib import Path
@@ -19,6 +20,7 @@ from urllib.parse import urlsplit
 import httpx
 
 ENDPOINT_SUFFIXES = ("/images/generations", "/images/edits", "/chat/completions", "/models")
+_NO_PROXY_SEP = re.compile(r"[,\s]+")
 MIME_EXT = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
@@ -43,6 +45,35 @@ class ProviderError(Exception):
 
 class Cancelled(Exception):
     pass
+
+
+def clean_no_proxy() -> None:
+    """把 NO_PROXY 里带方括号的 IPv6 项改成 httpx 认得的写法。
+
+    httpx 0.28 解析 no_proxy 模式时会直接拒绝 ``[::1]``（InvalidURL），
+    而带方括号恰好是 NO_PROXY 里写 IPv6 的常见写法。这里只动方括号：
+    ``[::1]`` -> ``::1``，``[2001:db8::1]:8080`` -> ``2001:db8::1``。
+    程序发请求时靠的就是这个环境变量，所以在模块加载时顺手做一次。
+    """
+    for name in ("NO_PROXY", "no_proxy"):
+        value = os.environ.get(name)
+        if not value or "[" not in value:
+            continue
+        items = []
+        for item in _NO_PROXY_SEP.split(value):
+            item = item.strip()
+            if not item:
+                continue
+            if item.startswith("["):
+                host = item[1:].split("]", 1)[0]
+                if host:
+                    items.append(host)
+            else:
+                items.append(item)
+        os.environ[name] = ",".join(items)
+
+
+clean_no_proxy()
 
 
 def normalize_base_url(url: str) -> str:

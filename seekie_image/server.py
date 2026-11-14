@@ -85,6 +85,7 @@ ROUTES = [
     ("POST", r"/api/clipboard", lambda c, r: c.paste(images=r.json().get("images") is not False)),
     ("POST", r"/api/files/([\w.-]+)/copy", lambda c, r: c.copy_image(r.args[0])),
     ("POST", r"/api/activate", lambda c, r: c.activate()),
+    ("POST", r"/api/window-title", lambda c, r: c.set_window_title(r.json().get("title"))),
     ("POST", r"/api/devtools", lambda c, r: c.toggle_devtools()),
     ("POST", r"/api/files/([\w.-]+)/export", lambda c, r: c.export(r.args[0])),
     ("POST", r"/api/files/([\w.-]+)/reveal", lambda c, r: c.reveal(r.args[0])),
