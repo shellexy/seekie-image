@@ -165,7 +165,7 @@ def _run(instance: InstanceLock, args: argparse.Namespace, data_dir: Path, image
         webview.start(**options)
     except Exception as exc:
         log.exception("桌面窗口启动失败")
-        _show_error(f"Seekie Image 启动失败：{exc}\n\n详细信息见：{log_path}")
+        _show_error(f"Seekie Image 启动失败：{exc}\n\n详细信息见：{data_dir / 'app.log'}")
         return 1
     finally:
         server.shutdown()

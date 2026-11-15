@@ -13,7 +13,14 @@ _TARGET = 'webview.platforms.gtk'
 
 
 def _install_gtk_native_file_dialog():
-    from webview import FileDialog
+    try:
+        from webview import FileDialog
+        folder_dialog, open_dialog, save_dialog = (
+            FileDialog.FOLDER, FileDialog.OPEN, FileDialog.SAVE,
+        )
+    except ImportError:  # pywebview 5.x / 发行版自带的旧版本
+        from webview import FOLDER_DIALOG, OPEN_DIALOG, SAVE_DIALOG
+        folder_dialog, open_dialog, save_dialog = FOLDER_DIALOG, OPEN_DIALOG, SAVE_DIALOG
     from webview.platforms.gtk import BrowserView
 
     if getattr(BrowserView.create_file_dialog, _PATCH_FLAG, False):
@@ -25,16 +32,16 @@ def _install_gtk_native_file_dialog():
 
     def create_file_dialog(self, dialog_type, directory, allow_multiple,
                            save_filename, file_types):
-        if dialog_type == FileDialog.FOLDER:
+        if dialog_type == folder_dialog:
             action = gtk.FileChooserAction.SELECT_FOLDER
             title = self.localization['linux.openFolder']
             accept_label = '_Open'
-        elif dialog_type == FileDialog.OPEN:
+        elif dialog_type == open_dialog:
             action = gtk.FileChooserAction.OPEN
             title = (self.localization['linux.openFiles'] if allow_multiple
                      else self.localization['linux.openFile'])
             accept_label = '_Open'
-        elif dialog_type == FileDialog.SAVE:
+        elif dialog_type == save_dialog:
             action = gtk.FileChooserAction.SAVE
             title = self.localization['global.saveFile']
             accept_label = '_Save'
@@ -47,14 +54,14 @@ def _install_gtk_native_file_dialog():
         if directory:
             dialog.set_current_folder(directory)
         self._add_file_filters(dialog, file_types)
-        if dialog_type == FileDialog.SAVE and save_filename:
+        if dialog_type == save_dialog and save_filename:
             dialog.set_current_name(save_filename)
 
         response = dialog.run()
 
         # FileChooserNative 用的是 ACCEPT，不是 OK
         if response == gtk.ResponseType.ACCEPT:
-            if dialog_type == FileDialog.SAVE:
+            if dialog_type == save_dialog:
                 file_name = (dialog.get_filename(),)
             else:
                 file_name = dialog.get_filenames()
