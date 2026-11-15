@@ -1,6 +1,6 @@
 name: Build
 
-# 推 v* 标签时构建 Linux（.deb / AppImage）和 Windows 安装包，全部成功后才发布到 Releases。
+# 推 v* 标签时构建 Linux .deb 和 Windows 安装包，全部成功后才发布到 Releases。
 # 手动触发只构建并把产物留在 Actions 里，方便先跑通再发版。
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
   linux:
-    name: Linux（deb / AppImage）
+    name: Linux（deb）
     needs: test
     runs-on: ubuntu-24.04
     steps:
@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            python3-venv python3-gi python3-webview python3-httpx python3-pil \
+            python3-gi python3-webview python3-httpx python3-pil \
             gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
             xvfb xauth curl file
 
@@ -60,27 +60,6 @@ jobs:
       - name: 构建 deb（纯 Python）
         run: bash packaging/linux/build-deb.sh
 
-      - name: 准备 AppImage 构建环境
-        run: |
-          /usr/bin/python3 -m venv --system-site-packages .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/pip install . pyinstaller
-
-      - name: PyInstaller（AppImage 用）
-        run: |
-          .venv/bin/pyinstaller --noconfirm --clean packaging/pyinstaller/seekie-image.spec
-          dist/seekie-image/seekie-image --version
-
-      - name: 冒烟测试 PyInstaller 包（浏览器模式）
-        run: bash packaging/linux/smoke-test.sh dist/seekie-image/seekie-image
-
-      # 原生窗口依赖 GTK/WebKit 和 Xvfb。先在 CI 里跑一遍，确认冻结包能加载它们。
-      - name: 冒烟测试 PyInstaller 包（Xvfb 原生窗口）
-        run: bash packaging/linux/native-smoke.sh dist/seekie-image/seekie-image
-
-      - name: 构建 AppImage
-        run: bash packaging/linux/build-appimage.sh
-
       # deb 里的启动器用系统 python3；PYTHONPATH 指向解包出来的 dist-packages，
       # 这样既测到包内容，又确实用系统的 python3-webview / httpx / Pillow。
       - name: 冒烟测试 deb 里的程序
@@ -98,21 +77,11 @@ jobs:
           sudo apt-get install -y ./dist/*.deb
           seekie-image --version
 
-      - name: 冒烟测试 AppImage
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: |
-          app="$(ls dist/*.AppImage)"
-          chmod +x "$app"
-          bash packaging/linux/smoke-test.sh "$app"
-
       - uses: actions/upload-artifact@v7
         with:
           name: linux
           if-no-files-found: error
-          path: |
-            dist/*.deb
-            dist/*.AppImage
+          path: dist/*.deb
 
   windows:
     name: Windows（安装包）
@@ -170,6 +139,39 @@ jobs:
             if ($second.ExitCode -ne 0) { throw "第二个实例退出码 $($second.ExitCode)" }
             $p.Refresh()
             if ($p.HasExited) { throw "第二个实例把第一个实例挤掉了" }
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: 冒烟测试（原生窗口）
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP "seekie-native"
+          New-Item -ItemType Directory -Force -Path $data | Out-Null
+          $port = Get-Random -Minimum 20000 -Maximum 40000
+          $exe = (Resolve-Path "dist\seekie-image\seekie-image.exe").Path
+          $p = Start-Process -FilePath $exe -ArgumentList "--port",$port,"--data-dir",$data -PassThru
+          try {
+            $up = $false
+            for ($i = 0; $i -lt 150; $i++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing -NoProxy "http://127.0.0.1:$port/" | Out-Null
+                $up = $true
+                break
+              } catch {
+                Start-Sleep -Milliseconds 200
+              }
+            }
+            Start-Sleep -Seconds 3
+            $p.Refresh()
+            if ($p.HasExited) {
+              Write-Host "--- app.log ---"
+              if (Test-Path (Join-Path $data "app.log")) { Get-Content (Join-Path $data "app.log") -Raw }
+              throw "原生窗口启动失败：进程已退出，退出码 $($p.ExitCode)"
+            }
+            if (-not $up) { throw "原生窗口的 HTTP 服务没起来" }
+            if (-not $p.MainWindowTitle) { throw "进程还在，但没有主窗口" }
+            Write-Host "原生窗口标题：$($p.MainWindowTitle)"
           } finally {
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           }

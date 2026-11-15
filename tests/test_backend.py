@@ -85,6 +85,11 @@ class BackendTest(unittest.TestCase):
     def notes(self) -> set[str]:
         return {p.name for p in self.core.images_dir.glob("*.txt")}
 
+    def test_2k_sizes_are_available(self):
+        ids = {size["id"] for size in config.SIZES}
+        for size in ("2048x2048", "2016x1344", "1344x2016", "2048x1152", "1152x2048"):
+            self.assertIn(size, ids)
+
     def test_base_url(self):
         self.assertEqual(normalize_base_url("api.example.com"), "https://api.example.com/v1")
         self.assertEqual(normalize_base_url("https://a.b/v1/images/generations"), "https://a.b/v1")

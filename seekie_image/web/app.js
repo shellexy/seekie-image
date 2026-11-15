@@ -1191,6 +1191,18 @@ function bindComposer() {
     event.preventDefault();
     submitComposer();
   });
+  // WebKitGTK / Qt WebEngine 里，输入框的 Ctrl+Z 快捷键不会自己生效；
+  // 显式调用内核的 undo/redo 命令。所有文本输入框都走这里。
+  document.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.isComposing) return;
+    if (!(event.target instanceof Element) || !isTextField(event.target)) return;
+    const key = String(event.key || '').toLowerCase();
+    const redo = (key === 'z' && event.shiftKey) || key === 'y';
+    const undo = key === 'z' && !event.shiftKey;
+    if (!undo && !redo) return;
+    event.preventDefault();
+    document.execCommand(redo ? 'redo' : 'undo');
+  }, true);
   els.composer.addEventListener('submit', (event) => { event.preventDefault(); submitComposer(); });
 
   $('#attach').addEventListener('click', () => els.fileInput.click());

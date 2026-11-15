@@ -2,7 +2,7 @@
 # 冒烟测试：用浏览器模式起一个实例，确认页面和 /api/state 正常，
 # 再启动第二个实例，确认它直接退出且不影响第一个实例。
 #
-# 用法：bash packaging/linux/smoke-test.sh <可执行文件或 AppImage>
+# 用法：bash packaging/linux/smoke-test.sh <可执行文件>
 set -euo pipefail
 
 app="${1:?用法: smoke-test.sh <可执行文件>}"

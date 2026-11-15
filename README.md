@@ -48,7 +48,6 @@ Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步
 | 系统 | 文件 | 说明 |
 |---|---|---|
 | Linux | `seekie-image_<版本>_all.deb` | 纯 Python 包；由 apt 装上 python3-webview / httpx / Pillow 和 GTK / WebKit 依赖 |
-| Linux | `Seekie-Image-<版本>-x86_64.AppImage` | 自带 Python 依赖；GTK / WebKit 用系统的 |
 | Windows | `Seekie-Image-<版本>-Setup.exe` | Windows 10/11；需要 WebView2 运行时（一般已自带） |
 
 macOS 暂时没有预编译包，用下面的 `pip install .` 安装。
@@ -57,9 +56,9 @@ macOS 暂时没有预编译包，用下面的 `pip install .` 安装。
 > 运行时用系统的 `python3` 和 `python3-webview`（Ubuntu 24.04 提供 5.0.5），需要能提供
 > `python3-webview >= 5.0`、`python3-httpx >= 0.26`、`python3-pil >= 10.0` 的发行版。
 > 流式响应由程序自己解析，不需要 `python3-httpx-sse`。
-> AppImage 仍由 Ubuntu 24.04 构建，自带 Python，GTK/WebKitGTK 取系统的，需要 glibc 2.39+。
 >
-> Windows 安装包没有代码签名，首次运行可能被 SmartScreen 拦一下，选「更多信息 → 仍要运行」即可。
+> Windows 安装包没有代码签名，首次运行可能被 SmartScreen 拦一下，选「更多信息 → 仍要运行」即可；
+> 启动失败时看 `%APPDATA%\seekie-image\app.log`，安装包需要 WebView2 运行时。
 >
 > 如果之前用 `pip install .` 装过，建议先 `pip uninstall seekie-image` 并确认 `which -a seekie-image`；
 > 否则 `~/.local/bin` 里的旧启动器可能优先于 deb 安装的 `/usr/bin/seekie-image`。
@@ -237,6 +236,9 @@ python main.py
 | 每帧时长 | `frame_duration_ms` | 20–2000 毫秒，仅 GIF                                 |
 | 风格  | 无            | 在提示词末尾追加一句风格描述                                        |
 
+比例菜单里另有 5 个 2K 预设：`2048x2048`、`2016x1344`、`1344x2016`、`2048x1152`、`1152x2048`，
+宽高都是 16 的倍数，主要给 gpt-image 2.5 / 2.6 用；其它模型是否接受以服务商为准。
+
 `xhigh`、`max` 和 `complexity` 是 gpt-image-2.6 才有的，发给旧模型会被接口拒绝。
 
 代理环境变量（`http_proxy` / `https_proxy` / `no_proxy`）照常生效。如果 `NO_PROXY` 里写了
@@ -268,7 +270,8 @@ python mock_api.py --port 8787 --delay 3
 * `history.db`：历史记录；
 * `thumbs/`：缩略图；
 * `refs/`：你上传或粘贴进来的参考图；
-* `instance.lock` / `instance.json`：单实例用的锁，以及界面地址和本机接口令牌（程序运行期间才有意义）。
+* `instance.lock` / `instance.json`：单实例用的锁，以及界面地址和本机接口令牌（程序运行期间才有意义）；
+* `app.log`：运行日志。桌面入口没有控制台时，启动失败先看这里。
 
 图片目录里只有生成的原图和同名的说明文件，文件名是生成时间加几位随机字符：
 
@@ -307,7 +310,7 @@ seekie_image/
   assets/            图标（icon.png、seekie-image.ico、hicolor/ 各尺寸）和 .desktop 文件
   web/               界面（index.html / app.css / app.js / logo.png）
 tests/               后端测试：python -m unittest discover -s tests
-packaging/           PyInstaller 配置、Linux 的 deb / AppImage、Windows 的 Inno Setup
+packaging/           PyInstaller 配置、Linux 的 deb、Windows 的 Inno Setup
 .github/workflows/   推 v* 标签时构建并发布安装包
 ```
 
@@ -322,7 +325,7 @@ pywebview 只负责开窗口和「另存为」对话框。
 
 推一个 `v*` 标签时，[.github/workflows/build.yml](.github/workflows/build.yml) 会构建并发布：
 
-* Linux：`.deb` 和 AppImage；
+* Linux：`.deb`（纯 Python，不再构建 AppImage）；
 * Windows：Inno Setup 安装包。
 
 在 Actions 里手动触发 `Build` 只构建、不发布，方便先验证。本地构建：
@@ -331,19 +334,15 @@ pywebview 只负责开窗口和「另存为」对话框。
 # Linux deb：纯 Python，不需要 PyInstaller
 bash packaging/linux/build-deb.sh
 
-# AppImage：需要 PyInstaller
+# Windows：先 PyInstaller，再用 Inno Setup 6 打包
 pip install . pyinstaller
 pyinstaller --noconfirm --clean packaging/pyinstaller/seekie-image.spec
-bash packaging/linux/build-appimage.sh
-
-# Windows：需要 Inno Setup 6
-ISCC.exe /DMyAppVersion=0.4.1 packaging\windows\seekie-image.iss
+ISCC.exe /DMyAppVersion=0.4.2 packaging\windows\seekie-image.iss
 ```
 
 产物都在 `dist/` 里。`.deb` 是 `Architecture: all` 的纯 Python 包，使用系统的
-`python3-webview` 和 GTK / WebKitGTK；AppImage 自带 Python 和 Python 依赖，GTK / WebKit
-仍取系统的。`.github/workflows/build.yml` 里用 Ubuntu 24.04 的系统包跑测试，
-并包含浏览器模式和 Xvfb 原生窗口的冒烟测试。
+`python3-webview` 和 GTK / WebKitGTK。`.github/workflows/build.yml` 里用 Ubuntu 24.04
+的系统包跑测试，并包含浏览器模式和 Xvfb 原生窗口的冒烟测试。
 
 ### 图标
 
@@ -353,7 +352,7 @@ ISCC.exe /DMyAppVersion=0.4.1 packaging\windows\seekie-image.iss
 python packaging/make-icons.py
 ```
 
-它会重新生成 Linux 桌面用的 `assets/hicolor/<尺寸>/apps/seekie-image.png`、AppImage 的根图标，
+它会重新生成 Linux 桌面用的 `assets/hicolor/<尺寸>/apps/seekie-image.png`，
 以及 Windows 程序 / 安装包 / 快捷方式用的 `assets/seekie-image.ico`。GTK 窗口图标直接读
 `icon.png`，不用另外生成；网页里的 `web/logo.png` 是单独的一张插图，不会被这个脚本改动。
 

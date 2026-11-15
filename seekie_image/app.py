@@ -7,6 +7,7 @@ from . import kde_native_dialog_patch # 猴子补丁，让 kde 下能使用 kde 
 import argparse
 import inspect
 import logging
+import logging.handlers
 import sys
 import threading
 import webbrowser
@@ -60,6 +61,18 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = (args.data_dir or default_data_dir()).expanduser()
     images_dir = (args.images_dir or default_images_dir(args.data_dir and data_dir)).expanduser()
     data_dir.mkdir(parents=True, exist_ok=True)
+
+    # 桌面入口/pyw 启动时没有 stderr，出错只能看日志文件
+    log_path = data_dir / "app.log"
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=1_000_000, backupCount=1, encoding="utf-8", delay=True,
+        )
+        file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logging.getLogger().addHandler(file_handler)
+    except OSError:
+        log.warning("没法写日志文件：%s", log_path, exc_info=True)
+    log.info("日志文件：%s", log_path)
 
     # 同一份数据目录只跑一个进程；后来的直接去叫醒已经开着的那个
     instance = InstanceLock(data_dir)
@@ -127,29 +140,46 @@ def _run(instance: InstanceLock, args: argparse.Namespace, data_dir: Path, image
         return 0
 
     threading.Thread(target=server.serve_forever, name="http", daemon=True).start()
-    # GTK 和 Qt 都用 argv[0] 给窗口起类名（WM_CLASS / Wayland app_id）。
-    # 让它和 .desktop 文件同名，任务栏才会把窗口和启动器、图标对上。
-    sys.argv[0] = desktop.APP_ID
-    webview.settings["ALLOW_DOWNLOADS"] = True
-    core.window = webview.create_window(
-        TITLE,
-        server.url,
-        width=1280,
-        height=800,
-        min_size=(820, 600),
-        background_color="#F5F4FC",
-        text_select=True,  # pywebview 默认禁止选中文字，这里需要能选中提示词
-    )
-    options = {"debug": args.debug}
-    if "icon" in inspect.signature(webview.start).parameters:  # 较老的 pywebview 没有这个参数
-        options["icon"] = str(desktop.ICON)  # 只有 GTK / Qt 后端会用到
-    # 窗口还没显示时第二个实例可能就来敲门了：先留下地址，窗口马上出来
-    instance.remember(url=server.url, token=server.token, native=True)
     try:
+        # GTK 和 Qt 都用 argv[0] 给窗口起类名（WM_CLASS / Wayland app_id）。
+        # 只在 Linux 上改：Windows 上 pywebview 可能拿 argv[0] 找 DLL。
+        if sys.platform.startswith("linux"):
+            sys.argv[0] = desktop.APP_ID
+        webview.settings["ALLOW_DOWNLOADS"] = True
+        core.window = webview.create_window(
+            TITLE,
+            server.url,
+            width=1280,
+            height=800,
+            min_size=(820, 600),
+            background_color="#F5F4FC",
+            text_select=True,  # pywebview 默认禁止选中文字，这里需要能选中提示词
+        )
+        options = {"debug": args.debug}
+        if "icon" in inspect.signature(webview.start).parameters:  # 较老的 pywebview 没有这个参数
+            options["icon"] = str(desktop.ICON)  # 只有 GTK / Qt 后端会用到
+        # 窗口还没显示时第二个实例可能就来敲门了：先留下地址，窗口马上出来
+        instance.remember(url=server.url, token=server.token, native=True)
         webview.start(**options)
+    except Exception as exc:
+        log.exception("桌面窗口启动失败")
+        _show_error(f"Seekie Image 启动失败：{exc}\n\n详细信息见：{log_path}")
+        return 1
     finally:
         server.shutdown()
     return 0
+
+
+def _show_error(message: str) -> None:
+    """桌面入口没有控制台时，至少让 Windows 用户看到一个错误框。"""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, message, TITLE, 0x10)
+        except Exception:
+            pass
+    elif sys.stderr:
+        print(message, file=sys.stderr)
 
 
 if __name__ == "__main__":
