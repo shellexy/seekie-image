@@ -654,7 +654,7 @@ function emptyState() {
   return h('div', { class: 'empty' },
     h('img', { class: 'empty-logo', src: 'static/logo.png', alt: '', width: 88, height: 88 }),
     h('h2', null, '想画点什么？'),
-    h('p', null, '在下面描述画面，按 Enter 生成。可以粘贴或拖入图片作为参考。'));
+    h('p', null, '在下面描述画面，按回车绘画。Ctrl+回车换行。可以粘贴或拖入图片作为参考。'));
 }
 
 function sizeRatio(message, image) {

@@ -188,7 +188,7 @@ button:disabled { cursor: default; }
 /* ---------- 空状态 ---------- */
 
 .empty { margin: auto; text-align: center; max-width: 380px; padding: 24px 0 48px; align-self: center; }
-.empty-logo { display: block; width: 88px; height: 88px; margin: 0 auto 16px; }
+.empty-logo { display: block; width: 200px; height: 200px; margin: 0 auto 16px; }
 .empty h2 { margin: 0 0 6px; font-size: 18px; font-weight: 650; }
 .empty p { margin: 0 0 18px; color: var(--muted); font-size: 14.5px; line-height: 1.7; }
 
@@ -227,7 +227,7 @@ button:disabled { cursor: default; }
 .pickers { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 
 .pick {
-  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 11px; max-width: 100%;
+  display: inline-flex; align-items: center; gap: 2px; height: 38px; padding: 0 11px; max-width: 100%;
   border-radius: 999px; border: 1px solid var(--line); background: #f4f3fc; font-size: 13.5px; white-space: nowrap;
 }
 .pick:hover, .pick[aria-expanded="true"] { background: #eae9f8; }
