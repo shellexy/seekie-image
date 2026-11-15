@@ -48,6 +48,28 @@ COMPLEXITIES = [
     {"id": "high", "label": "高", "short": "复杂度 高", "hint": "high"},
 ]
 
+# 输出格式：只对 gpt-image 系列显示，请求里用 output_format / background 表达
+FORMATS = [
+    {"id": "png", "label": "PNG", "short": "PNG", "hint": "不透明背景",
+     "output": "png", "transparent": False, "frames": False},
+    {"id": "png-transparent", "label": "透明 PNG", "short": "透明 PNG", "hint": "背景透明",
+     "output": "png", "transparent": True, "frames": False},
+    {"id": "webp", "label": "WebP", "short": "WebP", "hint": "不透明背景",
+     "output": "webp", "transparent": False, "frames": False},
+    {"id": "webp-transparent", "label": "透明 WebP", "short": "透明 WebP", "hint": "背景透明",
+     "output": "webp", "transparent": True, "frames": False},
+    {"id": "gif", "label": "GIF 动画", "short": "GIF", "hint": "动态 GIF",
+     "output": "gif", "transparent": False, "frames": True},
+    {"id": "gif-transparent", "label": "透明 GIF", "short": "透明 GIF", "hint": "动态、背景透明",
+     "output": "gif", "transparent": True, "frames": True},
+]
+
+MAX_FRAMES = 16
+MIN_FRAME_DURATION_MS = 20
+MAX_FRAME_DURATION_MS = 2000
+DEFAULT_FRAME_COUNT = 9
+DEFAULT_FRAME_DURATION_MS = 200
+
 MAX_COUNT = 10  # Images API 的 n 最多到 10
 COUNTS = [
     {"id": 1, "label": "1 张", "short": "数量"},
@@ -62,6 +84,7 @@ OPTIONS = {
     "qualities": QUALITIES,
     "complexities": COMPLEXITIES,
     "counts": COUNTS,
+    "formats": FORMATS,
 }
 
 API_MODES = ("images", "chat")
@@ -76,6 +99,9 @@ DEFAULT_LAST = {
     "quality": "auto",
     "complexity": "default",
     "n": 1,
+    "format": "png",
+    "frame_count": DEFAULT_FRAME_COUNT,
+    "frame_duration_ms": DEFAULT_FRAME_DURATION_MS,
 }
 
 
@@ -103,6 +129,18 @@ def option_label(group: str, option_id: str) -> str | None:
         if item["id"] == option_id:
             return item["label"]
     return None
+
+
+def format_option(option_id: str) -> dict:
+    for item in FORMATS:
+        if item["id"] == option_id:
+            return item
+    return FORMATS[0]
+
+
+def supports_format(model: str) -> bool:
+    """输出格式、透明背景和 GIF 帧参数只对 gpt-image 系列发送。"""
+    return "gpt-image" in (model or "").lower()
 
 
 def style_prompt(style_id: str) -> str:

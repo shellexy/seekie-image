@@ -61,6 +61,7 @@ class BackendTest(unittest.TestCase):
         self.core = Core(Path(self.tmp.name))
         self.addCleanup(self.tmp.cleanup)
         self.addCleanup(self.core.close)
+        mock_api.Handler.last_params = {}
 
     def provider(self, **overrides) -> str:
         provider = {"name": "mock", "base_url": self.base, "api_key": "k", "models": ["m"], **overrides}
@@ -100,6 +101,81 @@ class BackendTest(unittest.TestCase):
         session = self.core.store.sessions()[0]
         self.assertEqual(session["thumb"], image["thumb"])
         self.assertEqual(self.core.config.data["last"]["quality"], "high")
+
+    def test_gpt_image_transparent_webp(self):
+        message = self.generate(self.provider(), model="gpt-image-2.6-sunburst", format="webp-transparent")
+        self.assertEqual(message["status"], "done", message["error"])
+        sent = mock_api.Handler.last_params
+        self.assertEqual(sent["output_format"], "webp")
+        self.assertEqual(sent["background"], "transparent")
+        self.assertNotIn("frame_count", sent)
+        self.assertEqual(message["params"]["format"], "webp-transparent")
+
+    def test_gpt_image_default_format_is_png(self):
+        message = self.generate(self.provider(), model="gpt-image-2.5")
+        self.assertEqual(message["status"], "done", message["error"])
+        sent = mock_api.Handler.last_params
+        self.assertEqual(sent["output_format"], "png")
+        self.assertEqual(sent["background"], "opaque")
+        self.assertNotIn("frame_count", sent)
+        self.assertEqual(message["params"]["format"], "png")
+
+    def test_gpt_image_gif_frames_and_note(self):
+        message = self.generate(
+            self.provider(), model="gpt-image-2.6-sunburst",
+            format="gif-transparent", frame_count=12, frame_duration_ms=150,
+        )
+        self.assertEqual(message["status"], "done", message["error"])
+        sent = mock_api.Handler.last_params
+        self.assertEqual(sent["output_format"], "gif")
+        self.assertEqual(sent["background"], "transparent")
+        self.assertEqual(sent["frame_count"], 12)
+        self.assertEqual(sent["frame_duration_ms"], 150)
+        note = next(self.core.images_dir.glob("*.txt")).read_text("utf-8")
+        self.assertIn("格式：透明 GIF", note)
+        self.assertIn("动画：12 帧，每帧 150 毫秒", note)
+
+    def test_gpt_image_format_with_reference_uses_multipart(self):
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (64, 64), "red").save(buffer, "PNG")
+        ref = self.core.upload(buffer.getvalue())
+        message = self.generate(
+            self.provider(), model="gpt-image-2.6", refs=[ref], format="png-transparent",
+        )
+        self.assertEqual(message["status"], "done", message["error"])
+        sent = mock_api.Handler.last_params
+        self.assertEqual(sent["output_format"], "png")
+        self.assertEqual(sent["background"], "transparent")
+
+    def test_gif_frames_are_clamped(self):
+        message = self.generate(
+            self.provider(), model="gpt-image-2.6", format="gif",
+            frame_count=99, frame_duration_ms=9999,
+        )
+        self.assertEqual(message["status"], "done", message["error"])
+        self.assertEqual(mock_api.Handler.last_params["frame_count"], 16)
+        self.assertEqual(mock_api.Handler.last_params["frame_duration_ms"], 2000)
+
+    def test_format_is_not_sent_for_old_models(self):
+        message = self.generate(self.provider(), model="m", format="gif-transparent", frame_count=5)
+        self.assertEqual(message["status"], "done", message["error"])
+        self.assertNotIn("output_format", mock_api.Handler.last_params)
+        self.assertNotIn("background", mock_api.Handler.last_params)
+        self.assertNotIn("frame_count", mock_api.Handler.last_params)
+
+    def test_gif_output_is_saved_as_gif(self):
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        first = Image.new("RGB", (32, 24), "red")
+        second = Image.new("RGB", (32, 24), "blue")
+        first.save(buffer, format="GIF", save_all=True, append_images=[second], duration=80, loop=0)
+        item = self.core._save_image(buffer.getvalue(), "image/gif")
+        self.assertTrue(item["file"].endswith(".gif"))
+        self.assertTrue(item["thumb"].endswith("_t.webp"))
+        self.assertEqual((item["w"], item["h"]), (32, 24))
 
     def test_edit_with_references(self):
         from PIL import Image

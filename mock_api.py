@@ -104,6 +104,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     delay = 2.0
     hosted: dict[str, bytes] = {}  # 以 url 形式返回的图片
+    last_params: dict = {}  # 最近一次绘图请求的参数，测试里用来看发出去的是什么
 
     def log_message(self, fmt, *args):
         say(fmt % args)
@@ -160,6 +161,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             return self._error(404, f"Unknown path {self.path}")
 
+        Handler.last_params = params
         prompt = str(params.get("prompt") or "")
         shown = {key: value for key, value in params.items() if key != "prompt"}
         say(f"参数 {shown}，参考图 {len(refs)} 张")

@@ -279,6 +279,13 @@ class Core:
         lines.append(f"比例：{shown('sizes', 'size', 'auto')}")
         lines.append(f"质量：{shown('qualities', 'quality', 'auto')}")
         lines.append(f"复杂度：{shown('complexities', 'complexity', 'default')}")
+        if cfg.supports_format(params["model"]):
+            fmt = cfg.format_option(params.get("format") or cfg.DEFAULT_LAST["format"])
+            lines.append(f"格式：{fmt['label']}")
+            if fmt.get("frames"):
+                count = params.get("frame_count") or cfg.DEFAULT_FRAME_COUNT
+                duration = params.get("frame_duration_ms") or cfg.DEFAULT_FRAME_DURATION_MS
+                lines.append(f"动画：{count} 帧，每帧 {duration} 毫秒")
         asked = params.get("n") or 1
         if asked > 1 or total > 1:
             lines.append(f"数量：请求 {asked} 张，这是返回的 {total} 张里的第 {index + 1} 张")
@@ -418,6 +425,15 @@ class Core:
             count = int(payload.get("n") or 1)
         except (TypeError, ValueError):
             count = 1
+        fmt = cfg.format_option(str(payload.get("format") or cfg.DEFAULT_LAST["format"]))
+        try:
+            frame_count = int(payload.get("frame_count") or cfg.DEFAULT_FRAME_COUNT)
+        except (TypeError, ValueError):
+            frame_count = cfg.DEFAULT_FRAME_COUNT
+        try:
+            frame_duration_ms = int(payload.get("frame_duration_ms") or cfg.DEFAULT_FRAME_DURATION_MS)
+        except (TypeError, ValueError):
+            frame_duration_ms = cfg.DEFAULT_FRAME_DURATION_MS
         params = {
             "provider_id": provider["id"],
             "provider_name": provider["name"],
@@ -427,6 +443,9 @@ class Core:
             "quality": str(payload.get("quality") or "auto"),
             "complexity": str(payload.get("complexity") or "default"),
             "n": min(max(count, 1), cfg.MAX_COUNT),
+            "format": fmt["id"],
+            "frame_count": min(max(frame_count, 1), cfg.MAX_FRAMES),
+            "frame_duration_ms": min(max(frame_duration_ms, cfg.MIN_FRAME_DURATION_MS), cfg.MAX_FRAME_DURATION_MS),
         }
 
         session = self.store.session(str(payload.get("session_id") or ""))
@@ -456,6 +475,9 @@ class Core:
         style = cfg.style_prompt(params["style"])
         if style:
             prompt = f"{prompt}\n\n画面风格：{style}"
+        image_format = None
+        if cfg.supports_format(params["model"]):
+            image_format = cfg.format_option(params.get("format") or cfg.DEFAULT_LAST["format"])
         try:
             results = job.run(
                 model=params["model"],
@@ -465,6 +487,9 @@ class Core:
                 complexity=params["complexity"],
                 refs=[self.file_path(ref["file"]) for ref in message["refs"]],
                 n=params.get("n") or 1,
+                image_format=image_format,
+                frame_count=params.get("frame_count") or cfg.DEFAULT_FRAME_COUNT,
+                frame_duration_ms=params.get("frame_duration_ms") or cfg.DEFAULT_FRAME_DURATION_MS,
                 on_partial=lambda slot, data, mime: self._set_preview(mid, slot, data, mime),
             )
             images = [self._save_image(data, mime) for data, mime in results]

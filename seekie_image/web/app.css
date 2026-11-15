@@ -14,6 +14,8 @@
   --accent-text: #3b3eb8;
   --danger: #d42b31;
   --danger-soft: #fceaea;
+  --checker-a: #f7f6fc;
+  --checker-b: #e3e1f0;
   --shadow: 0 12px 32px rgba(34, 34, 88, .16), 0 2px 6px rgba(34, 34, 88, .06);
   color-scheme: light;
 }
@@ -359,6 +361,21 @@ details.advanced summary { cursor: pointer; font-size: 13.5px; font-weight: 600;
 .lightbox[open] { display: grid; place-items: center; }
 .lightbox::backdrop { background: transparent; }
 .lightbox img { max-width: calc(100vw - 48px); max-height: calc(100vh - 48px); object-fit: contain; border-radius: 8px; cursor: zoom-out; }
+/* 透明图片的透明部分显示成棋盘格；不透明的图片会完全盖住它 */
+.shot img,
+.lightbox img,
+.session-thumb img,
+.card-refs img,
+.ref-chip img {
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
 .lightbox-bar { position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; }
 .lightbox-bar button { height: 38px; padding: 0 14px; border-radius: 999px; background: rgba(255, 255, 255, .14); color: #fff; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
 .lightbox-bar button:hover { background: rgba(255, 255, 255, .26); }

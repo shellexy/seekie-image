@@ -218,7 +218,8 @@ class Job:
         return self._cancelled.is_set()
 
     def run(self, *, model: str, prompt: str, size: str, quality: str, complexity: str,
-            refs: list[Path], n: int = 1, on_partial=None) -> list[tuple[bytes, str]]:
+            refs: list[Path], n: int = 1, image_format: dict | None = None,
+            frame_count: int = 0, frame_duration_ms: int = 0, on_partial=None) -> list[tuple[bytes, str]]:
         """返回 [(图片字节, mime), ...]。失败抛 ProviderError，被取消抛 Cancelled。
 
         on_partial(slot, data, mime)：流式生成时每收到一张中间预览图就调用一次，
@@ -226,7 +227,10 @@ class Job:
         """
         self._on_partial = on_partial
         try:
-            images = asyncio.run(self._main(model, prompt, size, quality, complexity, refs, max(1, int(n))))
+            images = asyncio.run(self._main(
+                model, prompt, size, quality, complexity, refs, max(1, int(n)),
+                image_format, frame_count, frame_duration_ms,
+            ))
         except asyncio.CancelledError:
             raise Cancelled() from None
         except httpx.HTTPError as exc:
@@ -235,7 +239,8 @@ class Job:
             raise Cancelled()
         return images
 
-    async def _main(self, model, prompt, size, quality, complexity, refs, n) -> list[tuple[bytes, str]]:
+    async def _main(self, model, prompt, size, quality, complexity, refs, n,
+                    image_format=None, frame_count=0, frame_duration_ms=0) -> list[tuple[bytes, str]]:
         with self._lock:
             self._loop = asyncio.get_running_loop()
             self._task = asyncio.current_task()
@@ -249,7 +254,10 @@ class Job:
             if self.provider.get("api_mode") == "chat":
                 sources = await self._chat_sources(client, model, prompt, refs, n)
             else:
-                payload = await self._post_images(client, model, prompt, size, quality, complexity, refs, n)
+                payload = await self._post_images(
+                    client, model, prompt, size, quality, complexity, refs, n,
+                    image_format, frame_count, frame_duration_ms,
+                )
                 sources = _sources_from_images(payload)
         return [await self._load(source) for source in sources]
 
@@ -270,7 +278,8 @@ class Job:
 
     # ---- 请求 ----
 
-    async def _post_images(self, client, model, prompt, size, quality, complexity, refs, n) -> dict:
+    async def _post_images(self, client, model, prompt, size, quality, complexity, refs, n,
+                           image_format=None, frame_count=0, frame_duration_ms=0) -> dict:
         body: dict = {"model": model, "prompt": prompt, "n": n}
         if size and size != "auto":
             body["size"] = size
@@ -278,6 +287,13 @@ class Job:
             body["quality"] = quality
         if complexity and complexity != "default":
             body["complexity"] = complexity
+        if image_format:
+            body["output_format"] = image_format["output"]
+            # 透明格式明确要透明背景；普通格式明确要实心背景，免得模型自己发挥
+            body["background"] = "transparent" if image_format.get("transparent") else "opaque"
+            if image_format.get("frames"):
+                body["frame_count"] = max(1, int(frame_count or 1))
+                body["frame_duration_ms"] = max(1, int(frame_duration_ms or 1))
         streaming = bool(self.provider.get("stream"))
         if streaming:
             body.update({"stream": True, "partial_images": 2})

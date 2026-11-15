@@ -140,7 +140,10 @@ const state = {
   currentId: null,   // null 表示「新绘画」，第一次生成时由后端建会话
   messages: [],
   refs: [],          // 输入区里待用的参考图 [{file, thumb}]
-  pick: { provider_id: null, model: null, style: 'none', size: 'auto', quality: 'auto', complexity: 'default', n: 1 },
+  pick: {
+    provider_id: null, model: null, style: 'none', size: 'auto', quality: 'auto', complexity: 'default',
+    n: 1, format: 'png', frame_count: 9, frame_duration_ms: 200,
+  },
 };
 
 const els = {
@@ -157,6 +160,7 @@ const els = {
 
 const provider = (id) => state.providers.find((p) => p.id === id);
 const option = (group, id) => state.options[group].find((o) => o.id === id);
+const modelSupportsFormat = (model) => /gpt-image/i.test(model || '');
 const currentSession = () => state.sessions.find((s) => s.id === state.currentId) || null;
 let lastWindowTitle = '';
 
@@ -180,11 +184,18 @@ async function syncTitle() {
 /** 设置变动后，保证当前选中的服务商和模型仍然存在。 */
 function fixPick() {
   const current = provider(state.pick.provider_id);
-  if (current && current.models.includes(state.pick.model)) return;
-  const fallback = (current && current.models.length ? current : null) ||
-    state.providers.find((p) => p.models.length);
-  state.pick.provider_id = fallback ? fallback.id : null;
-  state.pick.model = fallback ? fallback.models[0] : null;
+  if (!current || !current.models.includes(state.pick.model)) {
+    const fallback = (current && current.models.length ? current : null) ||
+      state.providers.find((p) => p.models.length);
+    state.pick.provider_id = fallback ? fallback.id : null;
+    state.pick.model = fallback ? fallback.models[0] : null;
+  }
+  // 旧配置里没有格式字段；值坏了也回落到默认，免得选项按钮显示空白
+  if (!(state.options.formats || []).some((f) => f.id === state.pick.format)) state.pick.format = 'png';
+  const frames = Number(state.pick.frame_count);
+  state.pick.frame_count = Number.isInteger(frames) ? Math.min(16, Math.max(1, frames)) : 9;
+  const duration = Number(state.pick.frame_duration_ms);
+  state.pick.frame_duration_ms = Number.isInteger(duration) ? Math.min(2000, Math.max(20, duration)) : 200;
 }
 
 /* ============================================================
@@ -473,6 +484,51 @@ function sizeDialog(current) {
   });
 }
 
+function gifDialog({ count = 9, duration = 200, label = 'GIF 动画' } = {}) {
+  const initialCount = Math.min(16, Math.max(1, Number(count) || 9));
+  const initialDuration = Math.min(2000, Math.max(20, Number(duration) || 200));
+  return new Promise((resolve) => {
+    const frames = h('input', {
+      type: 'number', value: initialCount, min: 1, max: 16, step: 1, 'aria-label': '帧数', autofocus: true,
+    });
+    const delay = h('input', {
+      type: 'number', value: initialDuration, min: 20, max: 2000, step: 10, 'aria-label': '每帧时长（毫秒）',
+    });
+    const error = h('p', { class: 'help error', role: 'alert' });
+    let result = null;
+    const dialog = h('dialog', { class: 'dialog-small' },
+      h('form', {
+        method: 'dialog',
+        onsubmit: (event) => {
+          event.preventDefault();
+          const n = Number(frames.value), ms = Number(delay.value);
+          if (!Number.isInteger(n) || n < 1 || n > 16) {
+            error.textContent = '帧数要填 1–16 之间的整数。';
+            return;
+          }
+          if (!Number.isInteger(ms) || ms < 20 || ms > 2000) {
+            error.textContent = '每帧时长要填 20–2000 之间的整数毫秒。';
+            return;
+          }
+          result = { count: n, duration: ms };
+          dialog.close('yes');
+        },
+      },
+        h('h2', null, label),
+        h('p', null, '帧数 1–16，每帧 20–2000 毫秒。帧数越多、时长越长，生成越慢、费用也越高。'),
+        h('div', { class: 'field' }, h('label', null, '帧数'), frames),
+        h('div', { class: 'field' }, h('label', null, '每帧时长（毫秒）'), delay),
+        error,
+        h('div', { class: 'dialog-actions' },
+          h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, '取消'),
+          h('button', { type: 'submit', class: 'btn accent' }, '使用这些参数'),
+        )));
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'yes' ? result : null));
+    showDialog(dialog);
+    frames.select();
+  });
+}
+
 /* ============================================================
  * 侧栏
  * ============================================================ */
@@ -617,6 +673,13 @@ function metaLine(message) {
   for (const [group, key, skip] of [['qualities', 'quality', 'auto'], ['styles', 'style', 'none'], ['complexities', 'complexity', 'default']]) {
     const known = p[key] && p[key] !== skip && option(group, p[key]);
     if (known) parts.push(key === 'complexity' ? known.short : known.label);
+  }
+  if (modelSupportsFormat(p.model) && p.format) {
+    const known = state.options.formats && option('formats', p.format);
+    if (known) {
+      parts.push(known.label);
+      if (known.frames) parts.push(`${p.frame_count || 9} 帧 / ${p.frame_duration_ms || 200} ms`);
+    }
   }
   if (p.n > 1) parts.push(`${p.n} 张`);
   if (message.status === 'done' && message.finished_at) {
@@ -817,7 +880,8 @@ function rerun(message) {
   return submit({
     session_id: message.session_id, prompt: message.prompt, refs: message.refs,
     provider_id: p.provider_id, model: p.model, style: p.style, size: p.size, quality: p.quality, complexity: p.complexity,
-    n: p.n || 1,
+    n: p.n || 1, format: p.format || 'png',
+    frame_count: p.frame_count || 9, frame_duration_ms: p.frame_duration_ms || 200,
   });
 }
 
@@ -827,7 +891,10 @@ function reuse(message) {
   state.refs = message.refs.slice(0, MAX_REFS);
   const source = provider(p.provider_id);
   if (source && source.models.includes(p.model)) Object.assign(state.pick, { provider_id: p.provider_id, model: p.model });
-  Object.assign(state.pick, { style: p.style, size: p.size, quality: p.quality, complexity: p.complexity, n: p.n || 1 });
+  Object.assign(state.pick, {
+    style: p.style, size: p.size, quality: p.quality, complexity: p.complexity, n: p.n || 1,
+    format: p.format || 'png', frame_count: p.frame_count || 9, frame_duration_ms: p.frame_duration_ms || 200,
+  });
   renderRefs();
   renderPickers();
   syncComposer();
@@ -942,6 +1009,21 @@ function renderPickers() {
   const optionItems = (group, key) => () => state.options[group].map((o) => ({
     label: o.label, hint: o.hint, checked: pick[key] === o.id, onSelect: () => choose(key, o.id),
   }));
+  const chooseFormat = async (item) => {
+    if (!item.frames) {
+      pick.format = item.id;
+      renderPickers();
+      return;
+    }
+    const result = await gifDialog({
+      count: pick.frame_count, duration: pick.frame_duration_ms, label: item.label,
+    });
+    if (!result) return;
+    pick.format = item.id;
+    pick.frame_count = result.count;
+    pick.frame_duration_ms = result.duration;
+    renderPickers();
+  };
 
   const hasModels = state.providers.some((p) => p.models.length);
   const modelPill = pill({
@@ -971,6 +1053,18 @@ function renderPickers() {
   const complexity = option('complexities', pick.complexity) || state.options.complexities[0];
   const knownSize = option('sizes', pick.size);
   const count = Number(pick.n) > 1 ? Number(pick.n) : 1;
+  const formats = state.options.formats || [];
+  const format = option('formats', pick.format) || formats[0];
+  const formatPill = modelSupportsFormat(pick.model) && format ? pill({
+    iconName: 'image', label: format.short, set: format.id !== 'png',
+    ariaLabel: `格式：${format.label}${format.frames ? `，${pick.frame_count} 帧，每帧 ${pick.frame_duration_ms} 毫秒` : ''}`,
+    items: () => formats.map((item) => ({
+      label: item.label,
+      hint: item.frames ? `${pick.frame_count} 帧 · ${pick.frame_duration_ms} ms` : item.hint,
+      checked: pick.format === item.id,
+      onSelect: () => chooseFormat(item),
+    })),
+  }) : null;
 
   // 重绘会换掉按钮；如果焦点原本在某个按钮上，重绘后还给同一位置的新按钮
   const focused = [...els.pickers.children].indexOf(document.activeElement);
@@ -1004,8 +1098,9 @@ function renderPickers() {
       iconName: 'images', label: count > 1 ? `${count} 张` : '数量', set: count > 1, ariaLabel: `一次生成 ${count} 张`,
       items: optionItems('counts', 'n'),
     }),
+    ...(formatPill ? [formatPill] : []),
   );
-  if (focused >= 0) els.pickers.children[focused].focus();
+  if (focused >= 0 && focused < els.pickers.children.length) els.pickers.children[focused].focus();
 }
 
 function syncComposer() {

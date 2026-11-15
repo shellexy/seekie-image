@@ -27,6 +27,7 @@ Python 后端 + pywebview 窗口，界面是原生 HTML/CSS/JS，没有构建步
       <li><a href="#user-content-窗口标题">窗口标题</a></li>
       <li><a href="#user-content-粘贴和右键菜单">粘贴和右键菜单</a></li>
       <li><a href="#user-content-一次多张和中间预览">一次多张和中间预览</a></li>
+      <li><a href="#user-content-输出格式">输出格式（gpt-image 2.5 / 2.6）</a></li>
       <li><a href="#user-content-开发者工具">开发者工具</a></li>
       <li><a href="#user-content-配置接口">配置接口</a></li>
       <li><a href="#user-content-不花钱先试一下">不花钱先试一下</a></li>
@@ -177,6 +178,27 @@ python main.py
   * 一次多张再加流式时，官方文档没有说明中间图怎么区分属于哪一张。接口事件里带 `output_index` 时各格显示各自的预览，
     不带时预览都显示在第一格。这一点只用项目自带的假接口验证过。
 
+## 输出格式
+
+模型名里包含 `gpt-image` 时，输入框下面「数量」右边会多一个「格式」选项：
+
+| 选项 | 请求参数 |
+|---|---|
+| PNG | `output_format=png`、`background=opaque` |
+| 透明 PNG | `output_format=png`、`background=transparent` |
+| WebP | `output_format=webp`、`background=opaque` |
+| 透明 WebP | `output_format=webp`、`background=transparent` |
+| GIF 动画 | `output_format=gif`、`background=opaque`、`frame_count`、`frame_duration_ms` |
+| 透明 GIF | `output_format=gif`、`background=transparent`、`frame_count`、`frame_duration_ms` |
+
+点「GIF 动画」或「透明 GIF」时会弹出对话框，询问：
+
+* **帧数**：1–16，默认 9；
+* **每帧时长**：20–2000 毫秒，默认 200。
+
+这些字段只对 `Images API` 发送；模型名不含 `gpt-image` 时不显示格式选项，也不会发送格式参数。
+透明图片在记录卡片、缩略图和查看大图时，透明区域会显示成棋盘格。
+
 ## 开发者工具
 
 桌面窗口里按 **Ctrl+Shift+I**（或 F12，macOS 是 ⌘⌥I）打开内核自带的开发者工具，再按一次关闭。
@@ -210,6 +232,9 @@ python main.py
 | 质量  | `quality`    | `low` / `medium` / `high` / `xhigh` / `max`，选「自动」时不发送 |
 | 复杂度 | `complexity` | gpt-image-2.6 的新参数，选「默认」时不发送                          |
 | 数量  | `n`          | 默认 1                                                  |
+| 格式  | `output_format` / `background` | 仅 gpt-image；PNG / WebP / GIF，透明时 `background=transparent` |
+| GIF 帧数 | `frame_count` | 1–16，仅 GIF                                            |
+| 每帧时长 | `frame_duration_ms` | 20–2000 毫秒，仅 GIF                                 |
 | 风格  | 无            | 在提示词末尾追加一句风格描述                                        |
 
 `xhigh`、`max` 和 `complexity` 是 gpt-image-2.6 才有的，发给旧模型会被接口拒绝。
@@ -252,7 +277,7 @@ python mock_api.py --port 8787 --delay 3
 20261114-150406-9b079a.txt
 ```
 
-`.txt` 里记着这张图的提示词、模型、服务商、风格、比例、质量、复杂度、数量（一次多张时）、额外参数、参考图数量、图片尺寸和生成时间。
+`.txt` 里记着这张图的提示词、模型、服务商、风格、比例、质量、复杂度、格式（GIF 时还有帧数和每帧时长）、数量（一次多张时）、额外参数、参考图数量、图片尺寸和生成时间。
 它只是给人看的记录，应用自己不读它；API Key 不会写进去。
 
 几点说明：
