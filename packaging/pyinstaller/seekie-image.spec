@@ -61,6 +61,7 @@ if sys.platform.startswith("linux"):
     runtime_hooks.append(str(ROOT / "packaging" / "pyinstaller" / "gi_path.py"))
 elif sys.platform == "win32":
     hiddenimports += ["webview.platforms.winforms", "webview.platforms.edgechromium"]
+    runtime_hooks.append(str(ROOT / "packaging" / "pyinstaller" / "pythonnet_windows.py"))
 elif sys.platform == "darwin":
     hiddenimports += ["webview.platforms.cocoa"]
 

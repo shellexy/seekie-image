@@ -150,7 +150,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path $data | Out-Null
           $port = Get-Random -Minimum 20000 -Maximum 40000
           $exe = (Resolve-Path "dist\seekie-image\seekie-image.exe").Path
-          $p = Start-Process -FilePath $exe -ArgumentList "--port",$port,"--data-dir",$data -PassThru
+          $stdout = Join-Path $env:RUNNER_TEMP "seekie-native-out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "seekie-native-err.log"
+          $p = Start-Process -FilePath $exe -ArgumentList "--port",$port,"--data-dir",$data `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
           try {
             $up = $false
             for ($i = 0; $i -lt 150; $i++) {
@@ -167,6 +170,10 @@ jobs:
             if ($p.HasExited) {
               Write-Host "--- app.log ---"
               if (Test-Path (Join-Path $data "app.log")) { Get-Content (Join-Path $data "app.log") -Raw }
+              Write-Host "--- stderr ---"
+              if (Test-Path $stderr) { Get-Content $stderr -Raw }
+              Write-Host "--- stdout ---"
+              if (Test-Path $stdout) { Get-Content $stdout -Raw }
               throw "原生窗口启动失败：进程已退出，退出码 $($p.ExitCode)"
             }
             if (-not $up) { throw "原生窗口的 HTTP 服务没起来" }
