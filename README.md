@@ -320,6 +320,18 @@ ISCC.exe /DMyAppVersion=0.4.1 packaging\windows\seekie-image.iss
 仍取系统的。`.github/workflows/build.yml` 里用 Ubuntu 24.04 的系统包跑测试，
 并包含浏览器模式和 Xvfb 原生窗口的冒烟测试。
 
+### 图标
+
+`seekie_image/assets/icon.png` 是图标母版（正方形、带透明通道）。改完执行：
+
+```bash
+python packaging/make-icons.py
+```
+
+它会重新生成 Linux 桌面用的 `assets/hicolor/<尺寸>/apps/seekie-image.png`、AppImage 的根图标，
+以及 Windows 程序 / 安装包 / 快捷方式用的 `assets/seekie-image.ico`。GTK 窗口图标直接读
+`icon.png`，不用另外生成；网页里的 `web/logo.png` 是单独的一张插图，不会被这个脚本改动。
+
 ## 目前没有做的
 
 * 「做成视频」：那是另一套视频接口。
