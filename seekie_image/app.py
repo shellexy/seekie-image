@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from . import kde_native_dialog_patch # 猴子补丁，让 kde 下能使用 kde 文件对话框
+
 import argparse
 import inspect
 import logging
