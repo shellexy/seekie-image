@@ -237,7 +237,7 @@ button:disabled { cursor: default; }
 
 .primary {
   flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 46px; padding: 0 22px; border-radius: 999px;
+  padding: 15px; border-radius: 999px;
   background: var(--accent); color: #fff; font-weight: 600; white-space: nowrap;
 }
 .primary:hover:not(:disabled) { background: var(--accent-hover); }

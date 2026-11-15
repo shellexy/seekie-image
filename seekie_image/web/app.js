@@ -1084,7 +1084,7 @@ async function attachFiles(files) {
 }
 
 function bindComposer() {
-  els.generate.append(icon('sparkles', 18), '生成图片');
+  els.generate.append(icon('sparkles', 22));
   $('#attach').append(icon('imagePlus', 22));
   $('#new-session').append(icon('plus', 18), h('span', null, '新绘画'));
   $('#open-settings').append(icon('sliders', 18), h('span', null, '接口设置'));
