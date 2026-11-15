@@ -82,7 +82,7 @@ seekie-image
 * **macOS**：直接可用。
 * **Linux**：pywebview 需要一个图形后端，二选一：
   * Qt：`pip install ".[qt]"`（PyQt6）或 `pip install ".[pyside6]"`；
-  * GTK：用系统包，Debian/Ubuntu 是 `sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1`。
+  * GTK：用系统包，Debian/Ubuntu 是 `sudo apt install python3-webview python3-httpx python3-pil python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1`。
     系统包只对系统 Python 可见，放在虚拟环境里要用 `python3 -m venv --system-site-packages` 建环境。
 
 ### Linux 上的启动器和图标
