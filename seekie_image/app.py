@@ -156,8 +156,10 @@ def _run(instance: InstanceLock, args: argparse.Namespace, data_dir: Path, image
             text_select=True,  # pywebview 默认禁止选中文字，这里需要能选中提示词
         )
         options = {"debug": args.debug}
-        if "icon" in inspect.signature(webview.start).parameters:  # 较老的 pywebview 没有这个参数
-            options["icon"] = str(desktop.ICON)  # 只有 GTK / Qt 后端会用到
+        # icon 参数在 Windows 上会被 WinForms 当成 .ico 解析，传 png 会直接把进程崩掉；
+        # Windows / macOS 的窗口图标本来由可执行文件决定，这里只在 Linux 上传。
+        if sys.platform.startswith("linux") and "icon" in inspect.signature(webview.start).parameters:
+            options["icon"] = str(desktop.ICON)
         # 窗口还没显示时第二个实例可能就来敲门了：先留下地址，窗口马上出来
         instance.remember(url=server.url, token=server.token, native=True)
         webview.start(**options)
